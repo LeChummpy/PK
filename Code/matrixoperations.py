@@ -5,7 +5,7 @@ import copy
 #so_file = "/home/benni/Coding/5.PK/Code/utils.so"
 utils = np.ctypeslib.load_library('utils', '.')
 
-def convolve(inputMatrix, kernel, stride):
+def convolve_sharedlib(inputMatrix, kernel, stride):
     a = np.array(inputMatrix, dtype="float64")
     b = np.array(kernel, dtype="float64")
 
@@ -32,3 +32,88 @@ def convolve(inputMatrix, kernel, stride):
     d5_out = d5_out.value
     result = np.ctypeslib.as_array(out, shape=(d1_out, d2_out, d3_out, d4_out, d5_out))
     return result
+
+def sigmoid(x):
+    return (1 / (1 + np.exp(-x)) )
+
+def softmax(x):
+    return np.exp(x) / sum(np.exp(x))
+
+def Convolution_strided_img2col(inputMatrix, kernel_map, stride):
+    s0, s1, s2, s3 = inputMatrix.strides
+
+    d1_input, d2_input, h_input, w_input = inputMatrix.shape
+    d_kernel, h_kernel, w_kernel = kernel_map.shape
+
+    out_shape = ( d1_input, d2_input, (h_input-h_kernel+1)//stride, (w_input-w_kernel+1)//stride, h_kernel, w_kernel)
+    inputStackedColumns = np.lib.stride_tricks.as_strided(inputMatrix,
+                                                          shape=out_shape,
+                                                          strides=(s0, s1, stride*s2,stride*s3,s2, s3))
+
+    inputStackedColumns = inputStackedColumns.flatten()
+    inputStackedColumns = np.reshape(inputStackedColumns, (d1_input, d2_input, (h_input-h_kernel+1)//stride * ((w_input-w_kernel+1)//stride), h_kernel*w_kernel ))
+    kernel_map_edited = kernel_map.reshape(d_kernel, h_kernel*w_kernel).transpose()
+    im2col_conv = np.einsum("ijkl,lm->jkm", inputStackedColumns, kernel_map_edited)
+    im2col_conv = im2col_conv.swapaxes(0,2).swapaxes(1,2)
+    im2col_conv = im2col_conv.reshape(im2col_conv.shape[0], im2col_conv.shape[1], out_shape[2], out_shape[3])
+    return im2col_conv
+
+def Pooling_Matrixoperation(inputMatrix, kernel_shape, stride):
+    s0, s1, s2, s3 = inputMatrix.strides
+
+    d_kernel_map, d_input, h_input, w_input = inputMatrix.shape
+    h_kernel, w_kernel = kernel_shape
+
+    out_shape = ( d_kernel_map, d_input, (h_input-h_kernel+1)//stride, (w_input-w_kernel+1)//stride, h_kernel, w_kernel)
+    windows = np.lib.stride_tricks.as_strided(inputMatrix,
+                                                          shape=out_shape,
+                                                          strides=(s0, s1, stride*s2,stride*s3,s2, s3))
+    maxs = np.max(windows, axis=(4,5))
+    maxs = maxs.reshape(d_kernel_map, d_input, (h_input-h_kernel+1)//stride, (w_input-w_kernel+1)//stride)
+    return maxs
+
+def RELU_Matrixoperation(inputMatrix):
+    return np.maximum(inputMatrix, 0)
+
+def getPartialDerivativeConvolutionWRTkernelmap(inputMatrix, kernel_map, stride):
+    #kernelmap is a 4d array
+    s0, s1, s2, s3 = inputMatrix.strides
+
+    d1_input, d2_input, h_input, w_input = inputMatrix.shape
+    d1_kernel, d2_kernel, h_kernel, w_kernel = kernel_map.shape
+
+    out_shape = ( d1_input, d2_input, (h_input-h_kernel+1)//stride, (w_input-w_kernel+1)//stride, h_kernel, w_kernel)
+    inputStackedColumns = np.lib.stride_tricks.as_strided(inputMatrix,
+                                                          shape=out_shape,
+                                                          strides=(s0, s1, stride*s2,stride*s3,s2, s3))
+    inputStackedColumns = inputStackedColumns.flatten()
+    inputStackedColumns = np.reshape(inputStackedColumns, (d1_input, d2_input, (h_input-h_kernel+1)//stride * ((w_input-w_kernel+1)//stride), h_kernel*w_kernel ))
+    kernel_map_edited = kernel_map.reshape(d1_kernel, d2_kernel, h_kernel*w_kernel)
+    im2col_conv = np.einsum("ijkl,ijl->ijk", inputStackedColumns, kernel_map_edited).reshape(d1_input,d2_input,(h_input-h_kernel+1)//stride,(w_input-w_kernel+1)//stride)
+    return im2col_conv
+
+def getPartialDerivateMaxPool(inputMatrix, gradientPreviousLayer, kernel_shape, stride):
+    s0, s1, s2, s3 = inputMatrix.strides
+
+    d_kernel_map, d_input, h_input, w_input = inputMatrix.shape
+    h_kernel, w_kernel = kernel_shape
+
+    out_shape = ( d_kernel_map, d_input, (h_input-h_kernel+1)//stride, (w_input-w_kernel+1)//stride, h_kernel, w_kernel)
+    windows = np.lib.stride_tricks.as_strided(inputMatrix,
+                                                          shape=out_shape,
+                                                          strides=(s0, s1, stride*s2,stride*s3,s2, s3))
+
+    max = np.max(windows, axis=(4,5)).flatten().repeat(4, axis=0).reshape(windows.shape)
+    gradientPreviousLayer = gradientPreviousLayer.flatten().repeat(4, axis=0).reshape(windows.shape)
+    mask = np.equal(max, windows)
+    windows.fill(0)
+    windows[mask]=gradientPreviousLayer[mask]
+    windows = np.lib.stride_tricks.as_strided(windows,
+                                              shape=inputMatrix.shape,
+                                              strides=inputMatrix.strides)
+    return windows
+
+def getPartialDerivateRELU(inputMatrix):
+    inputMatrix[inputMatrix<=0] = 0
+    inputMatrix[inputMatrix!=0] = 1
+    return inputMatrix
