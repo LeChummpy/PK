@@ -57,6 +57,10 @@ def softmax(x):
 def Convolution_strided_img2col(inputMatrix, kernel_map, stride):
 
     inputStackedColumns = getinputStackedColumns(inputMatrix, kernel_map.shape[1:], stride)
+    d1_input, d2_input, h_input, w_input = inputMatrix.shape
+    d_kernel, h_kernel, w_kernel = kernel_map.shape
+
+    out_shape = ( d1_input, d2_input, (h_input-h_kernel+1)//stride, (w_input-w_kernel+1)//stride, h_kernel, w_kernel)
 
     inputStackedColumns = inputStackedColumns.flatten()
     inputStackedColumns = np.reshape(inputStackedColumns, (d1_input, d2_input, (h_input-h_kernel+1)//stride * ((w_input-w_kernel+1)//stride), h_kernel*w_kernel ))
@@ -68,7 +72,10 @@ def Convolution_strided_img2col(inputMatrix, kernel_map, stride):
 
 def Pooling_Matrixoperation(inputMatrix, kernel_shape, stride):
 
-    windows = getinputStackedColumns(inputMatrix, kernel_map.shape, stride)
+    windows = getinputStackedColumns(inputMatrix, kernel_shape, stride)
+    d_kernel_map, d_input, h_input, w_input = inputMatrix.shape
+    h_kernel, w_kernel = kernel_shape
+    out_shape = ( d_kernel_map, d_input, (h_input-h_kernel+1)//stride, (w_input-w_kernel+1)//stride, h_kernel, w_kernel)
 
     maxs = np.max(windows, axis=(4,5))
     maxs = maxs.reshape(d_kernel_map, d_input, (h_input-h_kernel+1)//stride, (w_input-w_kernel+1)//stride)
