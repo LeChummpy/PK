@@ -88,6 +88,8 @@ def getPartialDerivativeConvolutionWRTkernelmap(inputMatrix, kernel_map, stride)
     #kernelmap is a 4d array
 
     inputStackedColumns = getinputStackedColumns(inputMatrix, kernel_map.shape[2:], stride)
+    d1_input, d2_input, h_input, w_input = inputMatrix.shape
+    d1_kernel, d2_kernel,h_kernel, w_kernel = kernel_map.shape
 
     inputStackedColumns = inputStackedColumns.flatten()
     inputStackedColumns = np.reshape(inputStackedColumns, (d1_input, d2_input, (h_input-h_kernel+1)//stride * ((w_input-w_kernel+1)//stride), h_kernel*w_kernel ))
@@ -95,14 +97,19 @@ def getPartialDerivativeConvolutionWRTkernelmap(inputMatrix, kernel_map, stride)
     im2col_conv = np.einsum("ijkl,ijl->ijk", inputStackedColumns, kernel_map_edited).reshape(d1_input,d2_input,(h_input-h_kernel+1)//stride,(w_input-w_kernel+1)//stride)
     return im2col_conv
 
-def getPartialDerivativeConvolutionWRTx(kernel_map, gradient):
+def getPartialDerivativeConvolutionWRTx(kernel_map, gradient, stride):
+   
     d_kernel_map, h_kernel_map, w_kernel_map = kernel_map.shape
+    #5, 5, 5
     d1_gradient, d2_gradient, w_gradient, h_gradient = gradient.shape
+    #5, 27, 170, 170
 
     for i in range(d_kernel_map):
-        for j in range(d1_gradient):
-            for k in range(d2_gradient):
-                img_result = convolve2d(kernel_map[i], gradient[j][k], mode="full")
+        
+        for j in range(d2_gradient):
+            
+            img_result = convolve2d(kernel_map[i], gradient[i][j], mode="full")
+            #nicht rotation vergessen (weil nicht von unten angefangen)
 
 def getPartialDerivateMaxPool(inputMatrix, gradientPreviousLayer, kernel_shape, stride):
     windows = getinputStackedColumns(inputMatrix, kernel_shape, stride)
@@ -117,7 +124,7 @@ def getPartialDerivateMaxPool(inputMatrix, gradientPreviousLayer, kernel_shape, 
                                               strides=inputMatrix.strides)
     return windows
 
-def getPartialDerivateRELU(inputMatrix):
+def getMask(inputMatrix):
     inputMatrix[inputMatrix<=0] = 0
     inputMatrix[inputMatrix!=0] = 1
     return inputMatrix
