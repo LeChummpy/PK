@@ -103,13 +103,21 @@ def getPartialDerivativeConvolutionWRTx(kernel_map, gradient, stride):
     #5, 5, 5
     d1_gradient, d2_gradient, w_gradient, h_gradient = gradient.shape
     #5, 27, 170, 170
-
+    
+    result = []
     for i in range(d_kernel_map):
+        onelayer = []
         
         for j in range(d2_gradient):
             
             img_result = convolve2d(kernel_map[i], gradient[i][j], mode="full")
-            #nicht rotation vergessen (weil nicht von unten angefangen)
+            img_result = img_result.flip(axis=1).flip(axis=0)
+            
+            onelayer.append(img_result)
+            
+        result.append(onelayer)
+    return np.array(onelayer)
+            
 
 def getPartialDerivateMaxPool(inputMatrix, gradientPreviousLayer, kernel_shape, stride):
     windows = getinputStackedColumns(inputMatrix, kernel_shape, stride)
